@@ -1,0 +1,448 @@
+---
+title: "Dynamic Fit Indices"
+author: "Jay Jeffries"
+date: "3/9/2022"
+output:
+  rmdformats::downcute:
+    self_contained: true
+    thumbnails: true
+    lightbox: true
+    gallery: false
+    highlight: tango
+---
+
+```{r setup, include=FALSE, echo = F}
+knitr::opts_chunk$set(echo = TRUE)
+
+if(!require(lavaan)){
+    install.packages("lavaan") # lavaan necessary to conduct the following SEM measurement models
+    library(lavaan)
+}
+
+if(!require(lavaanPlot)){
+    install.packages("lavaanPlot") # lavaanPlot used to visualize measurement model (to check work)
+    library(lavaanPlot)
+}
+
+if(!require(effectsize)){
+    install.packages("effectsize") # effectsize helpful when interpreting model fit indices
+    library(effectsize)
+}
+
+library(skimr) # Data exploration
+library(readxl) # Used to read-in data
+library(knitr)
+library(dplyr)
+library(tidyr)
+library(rmdformats) # Must be downloaded to Knit to html, or delete all after "output:" in YAML
+
+setwd("/Users/jayjeffries/Desktop/R Resources/Dynamic Fit Indices") # Ensure your working directory is set
+BurnoutData <- read_excel("TeacherBurnout.xlsx")
+# Additional dataset information can be found at https://data.mendeley.com/datasets/6jmv43nffk/2
+
+sink("DFIsessionInfo.txt") # Save txt file for session information (R version, package versions)
+sessionInfo() # Helps with reproducibility 
+sink()
+```
+
+## Building the Model
+#### Confirmatory Factor Analysis of Teacher Burnout
+
+|              The obtained data has 5 latent variables inherent in the measures. These are: **teacher self-concept** (TSC), **efficacy** (TE), **emotional exhaustion** (EE), **depersonalization** (DE), and a **reduced sense of personal accomplishment** (RPA). For illustrative purposes, the scale for teacher self-concept will be used for modeling. Below are brief descriptive statistics for TSC1-TSC5:
+
+```{r BurnoutData}
+BurnoutData %>% skim(starts_with("TSC")) #%>% yank("numeric")
+```
+
+|       In order to generate dynamic fit indices, a CFA model must be created within `lavaan`. This is because later packages will involve functions that rely on a `lavaan` object. Below is a table of commands for the `lavaan` package to help build models.
+
+<center>
+
+| Formula type               | Operator | Expression         | MPlus Operator |
+|----------------------------|----------|--------------------|----------------|
+| Latent variable definition | =\~      | is measured by     |       BY       |
+| Regression                 | \~       | is regressed on    |       ON       |
+| (Residual) (co)Variance    | \~\~     | is correlated with |      WITH      |
+| Intercept                  | \~ 1     | intercept          |   [factor@1]   |
+
+</center>
+
+```{r Building Model}
+# You can use ' or " around model statement
+model_1 <- '
+SelfConcept =~ TSC1 + TSC2 + TSC3 + TSC4 + TSC5 
+'
+```
+
+```{r Quiet Model, echo = F}
+# Unstandardized solution
+fit_model <- sem(model_1, data = BurnoutData, std.lv = TRUE, estimator = "ML") 
+```
+
+```{r Theorized Model, echo = F}
+lavaanPlot(model = fit_model, node_options = list(shape = "box", fontname = "Times"), edge_options = list(color = "gray"), coefs = F)
+```
+
+## Unstandardized Model
+
+```{r Unstandardized Model}
+# Unstandardized solution
+fit_model <- sem(model_1, data = BurnoutData, std.lv = TRUE, estimator = "ML") 
+# std.lv = TRUE allows the first indicator of each latent variable to be unconstrained.
+# ML is default, but explicitly expressed here for illustrative purposes
+
+summary(fit_model)
+```
+
+```{r Unstd Model Plot, echo = F}
+lavaanPlot(model = fit_model, node_options = list(shape = "box", fontname = "Times"), edge_options = list(color = "grey"), coefs = TRUE, stand = FALSE, sig = .05)
+```
+
+|              This walkthrough will use maximum-likelihood as the estimation method due to limitations of later packages and also because it is the estimator used by Hu & Bentler (1999). For a conversation on other estimator methods and cutoff criteria, consider referring Xia & Yang (2019) ^[Xia, Y., Yang, Y. (2019). RMSEA, CFI, and TLI in structural equation modeling with ordered categorical data: The story they tell depends on the estimation methods. *Behavioral Research Methods*, 51. 409–428. https://doi.org/10.3758/s13428-018-1055-2]
+
+|              This model is plotted through use of `lavaanPlot` (Lishinksi, 2021)^[Alex Lishinski (2021). lavaanPlot: Path Diagrams for 'Lavaan' Models via 'DiagrammeR'. R package version 0.6.2. https://CRAN.R-project.org/package=lavaanPlot] package that uses components of `DiagrammeR`.
+
+## Standardized Model
+
+```{r Building Standardized Model}
+# Standardized solution
+summary(fit_model, standardized = TRUE)
+
+# Customized standardized solution
+std_fit_model <- standardizedsolution(fit_model, type = "std.all", se = TRUE, zstat = TRUE, pvalue = TRUE, ci = TRUE) %>%
+  filter(op == "=~") %>%
+  select(Latent_Var = lhs, Item = rhs, Coefficient = est.std, ci.lower, ci.upper, SE = se, Z = z, 'p-value' = pvalue)
+
+std_fit_model
+```
+
+```{r Std Model Plot, echo = F}
+lavaanPlot(model = fit_model, node_options = list(shape = "box", fontname = "Times"), edge_options = list(color = "grey"), coefs = TRUE, stand = TRUE, sig = .05)
+```
+
+\newpage
+
+## Traditional Model Fit Indices
+
+<center>
+
+| Model fit index                                 | Adequate fit        | Good fit  |
+|-------------------------------------------------|---------------------|-----------|
+| Comparative fit index (CFI)                     |  $\geq$ .90           | $\geq$ .95 |
+| Standardized root mean residual (SRMR)          | $\leq$ .08            | $\leq$ .05  |
+| Root mean square error of approximation (RMSEA) | $\leq$ .10, $\geq$ .08 | $\leq$ .06  |
+
+</center>
+
+Hu & Bentler (1999) ^[Hu, L., & Bentler, P. M. (1999). Cutoff criteria for fit indexes in covariance structure analysis: Conventional criteria versus new alternatives . Structural Equation Modeling: A Multidisciplinary Journal, 6, 1–55.]
+MacCallum et al. (1996) ^[MacCallum, R. C., Browne, M. W., & Sugawara, H. M. (1996). Power analysis and determination of sample size for covariance structure modeling. Psychological Methods, 1, 130-149.]
+Rosseel (2012) ^[Rosseel, Y. (2012). lavaan: An R Package for Structural Equation Modeling. Journal of Statistical Software, 48(2), 1-36.]
+
+### One-Factor Measurement Model
+```{r Traditional Fit Indices}
+parameterEstimates(fit_model, standardized = TRUE, rsquare = TRUE) %>% 
+  filter(op == "r2") %>% 
+  select(Item = rhs, R2 = est) 
+
+fit_indices <- fitMeasures(fit_model, c("rmsea", "rmsea.ci.lower", "rmsea.ci.upper", "rmsea.pvalue", "cfi", "srmr")) # lavaan-based way to find fit indices
+
+fit_indices
+```
+  
+ <font size="5"> &#x2611; </font> CFI meets good fit according to Hu & Butler (1999) traditional, static model fit cutoffs
+
+ <font size="5"> &#x2611; </font> RMSEA meets good fit according to MacCallum et al. (1996) traditional, static model fit cutoffs
+
+ <font size="5"> &#x2611; </font> SRMR meets good fit according to MacCallum et al. (1996) traditional, static model fit cutoffs
+
+## Simulating Dynamic Fit Indices
+
+|              Generated data contain the same number of variables and an equal sample size as the empirical data. The Monte Carlo simulation involves 500 repetitions to create 500 unique datasets. Simulated data rely on the Schneider (2019) ^[simstandard. Schneider, W. J. (2019). simstandard: Generate Standardized Data. R package version 0.3.0.] `simstandard` package. 
+
+|              The distribution of the 500 sets of fit indices are then summarized and the 5th percentile (for "lower-is-better" indices: RMSEA and SRMR) or 95th percentile (for "greater-is-better" indices: CFI) of the distribution are identified. These percentiles are used to generate (dynamic) fit indices that correctly reject a model with misspecification 95% of the time while leaving a false negative rate of 5%. In essence, the simulated fit index value can detect model misfit 95% of the time.
+
+```{r, echo = FALSE, fig.align = "center"}
+knitr::include_graphics("https://github.com/jjeffries13/Dynamic-Fit-Indices/blob/main/Images/Specified:Mispecified_Distributions.png?raw=true") #fig.height= "5", fig.width= "6",
+```
+
+|              In the example figure above, the closer to zero (the axes origin), the greater the fit of the model. The derived SRMR value of .04 is both the 95th percentile for the true model and the 5th percentile value for the misspecified model (McNeish & Wolf, 2021) ^[McNeish, D. & Wolf, M. G. (2021). Dynamic Fit Index Cutoffs for Confirmatory Factor Analysis Models. Psychological Methods. https://doi.org/10.1037/met0000425]. It is rare for both of these values to *perfectly* coincide. When this does not happen:
+
+* The 95th percentile of the correct model fit index distribution should be **at or below** the 5th percentile of the misspecified model fit index distribution for RMSEA and SRMR
+  + If the 95th percentile is below the 5th percentile, use the 5th percentile value (the more liberal cutoff, i.e. larger RMSEA/SRMR cutoff)
+* The 5th percentile of the correct model fit index distribution should be **at or below** the 95th percentile of the misspecified model fit index distribution for CFI
+  + If the 5th percentile is below the 95th percentile, use the 95th percentile value (the more liberal cutoff, i.e. smaller CFI cutoff)
+  
+|              Lastly, if false positive or false negative rates cannot be kept under 5%, then fit index values that keeps both rates at or below 10% are determined. The Shiny app will not report the 10% threshold cutoff when the 5% thresholds are available. If no value can be obtained to satisfy the 5% threshold, then it will attempt to compute the 10%. If neither 5% nor 10% thresholds are able to obtained, then the fit index distributions between the true and misspecified models cannot be differentiated. This will result in a "None" in the Shiny output, and may often arise due to small samples sizes.
+  
+### One-Factor Measurement Model
+#### Manual Entry
+
+|              Insert standardized path loadings into model statement that are found within your `lavaan` output. Ensure you use the "std.all" column values. If you choose this route, you must tell the function that you manually entering loadings via `manual = T` or `manual = TRUE`. 
+
+```{r Manual 1F DFI Entry, warning = F, message = F}
+if(!require(dynamic)){
+    install.packages("dynamic")
+    library(dynamic)
+}
+
+manual_model <- 'SelfConcept =~ .649*TSC1 + .7*TSC2 + .673*TSC3 + .630*TSC4 + .706*TSC5'
+
+cfaOne(manual_model, n = 876, plot = T, manual = T)
+
+c(fit_indices[6], fit_indices[1], fit_indices[5])
+```
+
+### One-Factor Measurement Model
+#### Auto-Fill Entry
+
+|              Insert `lavaan` object from the `cfa()` function into model statement. It is advised that you **check the output** before doing so. If you choose this route, the function default is `manual = F` or `manual = FALSE`, but you might want to enter this for transparency or reproducibility purposes. 
+
+```{r Auto-Fill 1F DFI Entry, warning = F, message = F}
+cfa_model <- 'SelfConcept =~ TSC1 + TSC2 + TSC3 + TSC4 + TSC5'
+
+auto_model <- lavaan::cfa(cfa_model, data = BurnoutData)
+
+cfaOne(auto_model, n = 876, plot = T, manual = F)
+```
+
+| Level of Misspecification  | Meaning  |
+|----------------------------|----------|
+| Level 1 | $\approx$ 1/3 of items have a residual correlation of .3 that you failed to include in your model | 
+| Level 2 | $\approx$ 2/3 of items have a residual correlation of .3 that you failed to include in your model |
+| Level 3 | $\approx$ All items have a residual correlation of .3 that you failed to include in your model |
+
+### Model Specification: Fixed Factor
+#### One-Factor Measurement Model
+
+```{r Fixed DFI Entry, warning = F, message = F}
+fixed_model <- 'SelfConcept =~ NA*TSC1 + TSC2 + TSC3 + TSC4 + TSC5
+SelfConcept ~~ 1*SelfConcept'
+
+fixed_factor_model <- lavaan::cfa(fixed_model, data = BurnoutData)
+
+summary(fixed_factor_model)
+
+interpret(fixed_factor_model) # {effectsize} interpretations; unecessary, as {dyanmic} prints CFI, RMSEA, SRMR
+
+cfaOne(fixed_factor_model, n = 876, plot = T, manual = F)
+```
+
+* Constraint on factor variance ($\eta = 1$)
+* Factor loadings of items are all freely estimated
+* Residuals of all items freely estimated
+
+## Model Specification: Marker Method
+#### One-Factor Measurement Model
+
+```{r Marker Method Model}
+# You can use ' or " around model statement
+model_2 <- 'SelfConcept =~ 1*TSC1 + TSC2 + TSC3 + TSC4 + TSC5' # Constrains first item at 1
+
+marker_model <- sem(model_2, data = BurnoutData, std.lv = F, estimator = "ML") 
+
+summary(marker_model)
+
+lavaanPlot(model = marker_model, node_options = list(shape = "box", fontname = "Times"), edge_options = list(color = "grey"), coefs = TRUE, stand = F, sig = .05)
+
+interpret(marker_model) # {effectsize} interpretations; unecessary, as {dyanmic} prints CFI, RMSEA, SRMR
+
+cfaOne(marker_model, n = 876, plot = F, manual = F)
+```
+
+* Constraint on first item (though this should be decided by theory, scaling of factor, and/or weight of factor loading)
+* Variance of factor freely estimated
+* Loadings of other 4 factor loadings freely estimated
+* Residuals of all items freely estimated
+
+## Model Specification: Effects Coding
+#### One-Factor Measurement Model
+
+```{r Effects Coding Model, warning = F, error = F, message = F}
+# Unstandardized solution
+effects_model <- sem(model_1, data = BurnoutData, std.lv = F, estimator = "ML", effect.coding = T) 
+
+lavaanify(model_1, effect.coding = "loadings") # Loadings are constrained via effects-code
+
+summary(effects_model)
+
+mean(c(1.007, 1.013, .976, .961, 1.043)) # Average of loadings for effects-code scaled factor = 1
+
+lavaanPlot(model = effects_model, node_options = list(shape = "box", fontname = "Times"), edge_options = list(color = "grey"), coefs = TRUE, stand = F, sig = .05)
+
+interpret(effects_model) # {effectsize} interpretations; unecessary, as {dyanmic} prints CFI, RMSEA, SRMR
+
+cfaOne(effects_model, n = 876, plot = F, manual = F)
+```
+
+* Constrains factor loadings to average to unity and indicator intercepts to average to zero.
+ + Average of set of loadings for a given construct = 1
+ + Estimated latent variances and latent means reflect the observed metric of the indictors, optimally weighted by the degree to which each indicator (Little et al., 2006) ^[Little, T., Slegers, D., & Card, N. (2006). A Non-arbitrary Method of Identifying and Scaling Latent Variables in SEM and MACS Models. *Structural Equation Modeling - a Multidisciplinary Journal, 13*(1). 59-72. 10.1207/s15328007sem1301_3.]
+represents the underlying latent construct
+* Variance of factor and residuals of items freely estimated
+
+## Reliability (Internal Consistency) 
+#### Using Coefficient H for One-Factor Measurement Model
+
+|              The choice to use Coefficient H in place of Cronbach's alpha to identify internal consistency of a scale that measures a construct of interest is a result of the tendency for constructs to be congeneric and scales to lack tau equivalence. See McNeish (2018) ^[McNeish D. (2018). Thanks coefficient alpha, we'll take it from here. Psychological methods, 23(3), 412–433. https://doi.org/10.1037/met0000144] and Hancock & Mueller (2001) ^[Hancock, G. & Mueller, R.O. (2001). Rethinking construct reliability within latent variable systems. Structural Equation Modeling: Present and Future. 195-216.] for more information on this. This function uses a `lavaan` object to find internal consistency of a CFA model. 
+
+* Cronbach alpha is rarely an appropriate measure of reliability as its assumptions are rigid and almost always violated. These include:
+  + **The scale adheres to tau equivalence** (non-congeneric)
+  + Scale items are on a continuous scale and normally distributed
+  + The errors of the items do not covary
+  + The scale is (or subscales are) unidimensional
+  (Cronbach, 1951) ^[Cronbach, L.J. (1951). Coefficient alpha and the internal structure of tests. *Psychometrika* 16, 297–334. https://doi.org/10.1007/BF02310555] 
+
+```{r Tau Eq, echo = FALSE, fig.align = "center"}
+knitr::include_graphics("https://github.com/jjeffries13/Dynamic-Fit-Indices/blob/main/Images/Tau_Equivalence.png?raw=true") # fig.height= "5", fig.width= "7"
+```
+
+### If the same true score for all test items, or equal factor loadings of all items in a factorial model, is a requirement for Cronbach's alpha to be a reliability coefficient which scale is inappropriate to use Cronbach alpha? 
+  
+* Cronbach alpha uses unit-weighting 
+  + In unit-weighted scales (Cronbach's alpha), every item receives equal treatment so an unrelated item hurts the scale
+  + The total score of the scale is calculated by adding up the raw scores (or reverse coded raw scores, if appropriate) of the individual items so that each item is weighted equally.
+  
+* Coefficient H uses optimal-weighting
+  + In optimally-weighted scales, items are differentially weighted so an unrelated item does not hurt reliability because the item simply receives very little or zero consideration when scoring the scale
+  + Each item contributes different amounts of information to the overall scale score (instead of each item being given the same weight with unit-weighting)
+  + Uses best possible linear combination of the items in terms of squared error loss.
+  
+ * Coefficient H requires the standardized factor loadings from a unidimensional factor analysis of the scale (or from unidimensional subscales).
+
+```{r 1F Coefficient H, message = F, warning = F, error = F}
+if(!require(reliable)){
+    remotes::install_github("JonasMoss/reliable")
+    library(reliable)
+}
+
+coefficient_H(auto_model) # internal consistency of Self-Concept measurement model
+```
+
+## Reduced Reliability Model
+#### Impact of Smaller Coefficient H on DFI 
+
+```{r Less Reliability Model}
+new_model2 <- 'EmotionalExhaustion =~ EE1 + EE2 + EE3 + EE4 + EE5'
+EE_model <- lavaan::cfa(new_model2, data = BurnoutData, estimator = "ML", std.lv = T)
+
+coefficient_H(EE_model) # internal consistency of Emotional Exhaustion measurement model
+
+lavaanPlot(model = EE_model, node_options = list(shape = "box", fontname = "Times"), edge_options = list(color = "grey"), coefs = TRUE, stand = F, sig = .05)
+
+interpret(EE_model) # {effectsize} interpretations; unecessary, as {dyanmic} prints CFI, RMSEA, SRMR
+
+cfaOne(EE_model, n = 876, plot = F, manual = F)
+```
+
+Lower scale internal consistency in the Emotional Exhaustion model ($H_{EE} = .88 < .95 = H_{TSC}$) results in more stringent dynamic fit indices due to lower scale reliability. 
+
+|              If you are not meeting adequate or good model fit, you should consult the residual correlation matrix for local areas of strain, check out the modification indices, and consider theory or scale characteristics (such as parallel wording of items). Below are results of the Emotional Exhaustion factor's modification indices:
+
+```{r mod indices}
+modindices(EE_model, sort = TRUE, maximum.number = 5) # Top 5 recommended modifications
+
+EE_modind <- modindices(EE_model)
+
+EE_modind[EE_modind$op == "~~",] # Mod indices for all residual covariances (correlations)
+```
+
+\newpage
+
+## Multi-Factor CFA
+#### Teacher Self-Concept and Efficacy
+
+```{r Multi-Factor CFA}
+multi_factor <- '
+SelfConcept =~ TSC1 + TSC2 + TSC3 + TSC4 + TSC5 
+TeacherEfficacy =~ TE1 + TE2 + TE3 + TE4 + TE5
+SelfConcept ~~ TeacherEfficacy
+'
+
+multi_model <- lavaan::cfa(multi_factor, data = BurnoutData, estimator = "ML", std.lv = T)
+
+summary(multi_model)
+
+lavaanPlot(model = multi_model, node_options = list(shape = "box", fontname = "Times"), edge_options = list(color = "grey"), coefs = TRUE, stand = F, sig = .05, covs = T)
+
+interpret(multi_model) # {effectsize} interpretations; unecessary, as {dyanmic} prints CFI, RMSEA, SRMR
+
+cfaHB(multi_model, n = 876, plot = F, manual = F) 
+```
+
+Hu & Bentler derived their cutoff values from a 3 factor model with 15 items, a range of loadings from .7 to .8, and a range of sample sizes from 250 to  5000. 
+
+* The cutoff values outputted for Level 1 are the Hu & Bentler equivalent for your particular model. 
+  + In other words, if Hu & Bentler had used your model to generate cutoff values, these are the cutoff values they would have published.
+  + the HB in `cfaHB()` stands for Hu & Bentler!
+* The model-implied CFI and RMSEA suggest unacceptable model fit, but the SRMR suggests adequate fit. 
+
+Coefficient H is not computed for this model because it is not unidimensional. Each scale can have its own internal consistency, which are TSC = 955 and TE = .891.
+
+<font size="5"> &#x2611; </font> CFI meets good fit according to Hu & Butler (1999) traditional, static model fit cutoff ($\geq$ .95) but does not meet simulated, dynamic fit cutoff ($\geq$ .98). 
+
+ <font size="5"> &#x2611; </font> RMSEA meets good fit according to MacCallum et al. (1996) traditional, static model fit cutoff ($\leq$ .06) but does not meet simulated, dynamic fit cutoff ($\leq$ .058).
+
+ <font size="5"> &#x2611; </font> SRMR meets good fit according to both MacCallum et al. (1996) traditional, static model fit cutoff ($\leq$ .05) and simulated dynamic fit indices ($\leq$ .04).
+ 
+In addition to Levels 1 through 3 of model misspecification, layers of misspecification are introduced when evaluating multi-factor models.
+
+* Additional misspecification severity conditions (missing cross-loadings) are sequentially added ontop of the existing levels of misspecification (missing correlated residuals) to elicit nuanced DFI cutoffs. 
+* Results in fit indices that are not merely dichotomous (“good” or “bad”) but rather that the level of goodness or badness can be quantified with certain degree.
+* "Magnitude" value speaks to the DFI cutoffs for a misspecification of one omitted cross-loading with a standardized magnitude of 0.455.
+  + i.e., the model does not fit exactly (significant $\chi^2$), but the amount of misfit is consistent with or less than an omitted standardized cross-loading equal to 0.455.
+
+## Multi-Factor CFA With Cross-Loadings
+#### Teacher Self-Concept and Efficacy
+
+```{r Multi-Factor Cross Loading CFA}
+cross_factor <- '
+SelfConcept =~ TSC1 + TSC2 + TSC3 + TSC4 + TSC5 + TE1
+TeacherEfficacy =~ TE1 + TE2 + TE3 + TE4 + TE5 + TSC1
+SelfConcept ~~ TeacherEfficacy
+'
+
+cross_model <- lavaan::cfa(cross_factor, data = BurnoutData, estimator = "ML", std.lv = T)
+
+summary(cross_model)
+
+lavaanPlot(model = cross_model, node_options = list(shape = "box", fontname = "Times"), edge_options = list(color = "grey"), coefs = TRUE, stand = F, sig = .05, covs = T)
+
+interpret(cross_model) # {effectsize} interpretations; unecessary, as {dyanmic} prints CFI, RMSEA, SRMR
+
+cfaHB(cross_model, n = 876, plot = F, manual = F) 
+```
+
+\newpage
+
+## Resources and References
+
+[Hancock & Mueller (2001)](https://www.researchgate.net/publication/312447691_Rethinking_construct_reliability_within_latent_variable_systems)
+
+[McNeish (2017) Thanks Coefficient Alpha, We'll Take it From Here](https://www.researchgate.net/publication/313852796_Thanks_Coefficient_Alpha_We'll_Take_it_From_Here)
+
+[Coefficient_H() R Function](https://rdrr.io/github/JonasMoss/reliable/man/coefficient_H.html)
+
+[McNeish & Wolf (2021) Dynamic Fit Index Cutoffs for Confirmatory Factor Analysis Models psyarxiv article](https://psyarxiv.com/v8yru/)
+
+[DFI Shiny App](https://dynamicfit.app/connect/)
+
+[{dynamic} Package Vignette](https://cran.r-project.org/web/packages/dynamic/dynamic.pdf)
+
+
+\newpage
+
+```{r Game Models, include = FALSE, echo = FALSE}
+BurnoutData %>% skim(starts_with("TE")) %>% yank("numeric")
+
+game_model <- 'TeacherEfficacy =~ TE1 + TE2 + TE3 + TE4 + TE5'
+
+TE_model <- lavaan::cfa(game_model, data = BurnoutData, estimator = "ML", std.lv = T)
+
+lavaanPlot(model = TE_model, node_options = list(shape = "box", fontname = "Times"), edge_options = list(color = "grey"), coefs = TRUE, stand = F, sig = .05, covs = T)
+
+coefficient_H(TE_model)
+
+interpret(TE_model) 
+
+cfaOne(TE_model, n = 876, plot = F, manual = F)
+```
